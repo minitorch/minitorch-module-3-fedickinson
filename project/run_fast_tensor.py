@@ -6,6 +6,7 @@ import minitorch
 
 datasets = minitorch.datasets
 FastTensorBackend = minitorch.TensorBackend(minitorch.FastOps)
+GPUBackend = None
 if numba.cuda.is_available():
     GPUBackend = minitorch.TensorBackend(minitorch.CudaOps)
 
@@ -15,7 +16,7 @@ def default_log_fn(epoch, total_loss, correct, losses):
 
 
 def RParam(*shape, backend):
-    r = minitorch.rand(shape, backend=backend) - 0.5
+    r = 2 * (minitorch.rand(shape, backend=backend) - 0.5)
     return minitorch.Parameter(r)
 
 
@@ -29,22 +30,22 @@ class Network(minitorch.Module):
         self.layer3 = Linear(hidden, 1, backend)
 
     def forward(self, x):
-        # TODO: Implement for Task 3.5.
-        raise NotImplementedError("Need to implement for Task 3.5")
+        # 3 layer network with relu
+        h1 = self.layer1.forward(x).relu()
+        h2 = self.layer2.forward(h1).relu()
+        return self.layer3.forward(h2).sigmoid()
 
 
 class Linear(minitorch.Module):
     def __init__(self, in_size, out_size, backend):
         super().__init__()
         self.weights = RParam(in_size, out_size, backend=backend)
-        s = minitorch.zeros((out_size,), backend=backend)
-        s = s + 0.1
-        self.bias = minitorch.Parameter(s)
+        self.bias = RParam(out_size, backend=backend)
         self.out_size = out_size
 
     def forward(self, x):
-        # TODO: Implement for Task 3.5.
-        raise NotImplementedError("Need to implement for Task 3.5")
+        # matrix multiply + bias
+        return x @ self.weights + self.bias
 
 
 class FastTrain:
@@ -62,37 +63,29 @@ class FastTrain:
     def train(self, data, learning_rate, max_epochs=500, log_fn=default_log_fn):
         self.model = Network(self.hidden_layers, self.backend)
         optim = minitorch.SGD(self.model.parameters(), learning_rate)
-        BATCH = 10
         losses = []
+
+        X = minitorch.tensor(data.X, backend=self.backend)
+        y = minitorch.tensor(data.y, backend=self.backend)
 
         for epoch in range(max_epochs):
             total_loss = 0.0
-            c = list(zip(data.X, data.y))
-            random.shuffle(c)
-            X_shuf, y_shuf = zip(*c)
+            optim.zero_grad()
 
-            for i in range(0, len(X_shuf), BATCH):
-                optim.zero_grad()
-                X = minitorch.tensor(X_shuf[i : i + BATCH], backend=self.backend)
-                y = minitorch.tensor(y_shuf[i : i + BATCH], backend=self.backend)
-                # Forward
+            # Forward
+            out = self.model.forward(X).view(data.N)
+            prob = (out * y) + (out - 1.0) * (y - 1.0)
 
-                out = self.model.forward(X).view(y.shape[0])
-                prob = (out * y) + (out - 1.0) * (y - 1.0)
-                loss = -prob.log()
-                (loss / y.shape[0]).sum().view(1).backward()
-
-                total_loss = loss.sum().view(1)[0]
-
-                # Update
-                optim.step()
-
+            loss = -prob.log()
+            (loss / data.N).sum().view(1).backward()
+            total_loss = loss.sum().view(1)[0]
             losses.append(total_loss)
+
+            # Update
+            optim.step()
+
             # Logging
             if epoch % 10 == 0 or epoch == max_epochs:
-                X = minitorch.tensor(data.X, backend=self.backend)
-                y = minitorch.tensor(data.y, backend=self.backend)
-                out = self.model.forward(X).view(y.shape[0])
                 y2 = minitorch.tensor(data.y)
                 correct = int(((out.detach() > 0.5) == y2).sum()[0])
                 log_fn(epoch, total_loss, correct, losses)
@@ -116,13 +109,21 @@ if __name__ == "__main__":
     if args.DATASET == "xor":
         data = minitorch.datasets["Xor"](PTS)
     elif args.DATASET == "simple":
-        data = minitorch.datasets["Simple"].simple(PTS)
+        data = minitorch.datasets["Simple"](PTS)
     elif args.DATASET == "split":
         data = minitorch.datasets["Split"](PTS)
 
     HIDDEN = int(args.HIDDEN)
     RATE = args.RATE
 
-    FastTrain(
-        HIDDEN, backend=FastTensorBackend if args.BACKEND != "gpu" else GPUBackend
-    ).train(data, RATE)
+    # Select backend
+    if args.BACKEND == "gpu":
+        if GPUBackend is None:
+            print("GPU backend requested but CUDA is not available. Falling back to CPU.")
+            backend = FastTensorBackend
+        else:
+            backend = GPUBackend
+    else:
+        backend = FastTensorBackend
+
+    FastTrain(HIDDEN, backend=backend).train(data, RATE)
