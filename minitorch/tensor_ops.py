@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable, Optional, Type
 
-import numpy as np # type: ignore
+import numpy as np
 from typing_extensions import Protocol
 
 from . import operators
@@ -27,21 +27,21 @@ class MapProto(Protocol):
 class TensorOps:
     @staticmethod
     def map(fn: Callable[[float], float]) -> MapProto:
-        raise NotImplementedError("Subclass must implement")
+        pass
 
     @staticmethod
     def cmap(fn: Callable[[float], float]) -> Callable[[Tensor, Tensor], Tensor]:
-        raise NotImplementedError("Subclass must implement")
+        pass
 
     @staticmethod
     def zip(fn: Callable[[float, float], float]) -> Callable[[Tensor, Tensor], Tensor]:
-        raise NotImplementedError("Subclass must implement")
+        pass
 
     @staticmethod
     def reduce(
         fn: Callable[[float, float], float], start: float = 0.0
     ) -> Callable[[Tensor, int], Tensor]:
-        raise NotImplementedError("Subclass must implement")
+        pass
 
     @staticmethod
     def matrix_multiply(a: Tensor, b: Tensor) -> Tensor:
@@ -129,17 +129,6 @@ class SimpleOps(TensorOps):
         def ret(a: Tensor, out: Optional[Tensor] = None) -> Tensor:
             if out is None:
                 out = a.zeros(a.shape)
-            f(*out.tuple(), *a.tuple())
-            return out
-
-        return ret
-
-    @staticmethod
-    def cmap(fn: Callable[[float], float]) -> Callable[[Tensor, Tensor], Tensor]:
-        """Copy map - similar to map but different signature"""
-        f = tensor_map(fn)
-
-        def ret(a: Tensor, out: Tensor) -> Tensor:
             f(*out.tuple(), *a.tuple())
             return out
 
@@ -279,30 +268,31 @@ def tensor_map(fn: Callable[[float], float]) -> Any:
         in_shape: Shape,
         in_strides: Strides,
     ) -> None:
-        # check if same shape and strides - can do fast version
-        same_shape = (
-            len(out_strides) == len(in_strides) and
-            np.array_equal(out_strides, in_strides) and
-            np.array_equal(out_shape, in_shape)
-        )
-        
-        if same_shape:
-            # easy case - just go through elements
+        # Simple case: same shapes and strides
+        if (
+            len(out_strides) == len(in_strides) 
+            and (out_strides == in_strides).all()
+            and (out_shape == in_shape).all()
+        ):
+            # Direct element-wise application
             for i in range(len(out)):
                 out[i] = fn(in_storage[i])
         else:
-            # harder case with broadcasting
-            out_index = np.zeros(MAX_DIMS, dtype=np.int32)
-            in_index = np.zeros(MAX_DIMS, dtype=np.int32)
-            
+            # Handle broadcasting
             for i in range(len(out)):
-                to_index(i, out_shape, out_index)
-                broadcast_index(out_index, out_shape, in_shape, in_index)
+                # Convert to multidimensional index
+                out_idx = np.zeros(len(out_shape), dtype=np.int32)
+                to_index(i, out_shape, out_idx)
                 
-                out_pos = index_to_position(out_index, out_strides)
-                in_pos = index_to_position(in_index, in_strides)
+                # Map to input index
+                in_idx = np.zeros(len(in_shape), dtype=np.int32)
+                broadcast_index(out_idx, out_shape, in_shape, in_idx)
                 
-                out[out_pos] = fn(in_storage[in_pos])
+                # Get position in input storage
+                in_pos = index_to_position(in_idx, in_strides)
+                
+                # Apply function
+                out[i] = fn(in_storage[in_pos])
 
     return _map
 
@@ -351,35 +341,36 @@ def tensor_zip(fn: Callable[[float, float], float]) -> Any:
         b_shape: Shape,
         b_strides: Strides,
     ) -> None:
-        # check if all tensors have same layout
-        same_layout = (
-            len(out_strides) == len(a_strides) == len(b_strides) and
-            np.array_equal(out_strides, a_strides) and
-            np.array_equal(out_strides, b_strides) and
-            np.array_equal(out_shape, a_shape) and
-            np.array_equal(out_shape, b_shape)
-        )
-        
-        if same_layout:
-            # simple case
+        # Simple case: all shapes match
+        if (
+            len(out_strides) == len(a_strides) == len(b_strides)
+            and (out_strides == a_strides).all()
+            and (out_strides == b_strides).all()
+            and (out_shape == a_shape).all()
+            and (out_shape == b_shape).all()
+        ):
+            # Direct element-wise operation
             for i in range(len(out)):
                 out[i] = fn(a_storage[i], b_storage[i])
         else:
-            # need to handle broadcasting
-            out_index = np.zeros(MAX_DIMS, dtype=np.int32)
-            a_index = np.zeros(MAX_DIMS, dtype=np.int32)
-            b_index = np.zeros(MAX_DIMS, dtype=np.int32)
-            
+            # Handle broadcasting
             for i in range(len(out)):
-                to_index(i, out_shape, out_index)
-                broadcast_index(out_index, out_shape, a_shape, a_index)
-                broadcast_index(out_index, out_shape, b_shape, b_index)
+                # Convert to multidimensional index
+                out_idx = np.zeros(len(out_shape), dtype=np.int32)
+                to_index(i, out_shape, out_idx)
                 
-                out_pos = index_to_position(out_index, out_strides)
-                a_pos = index_to_position(a_index, a_strides)
-                b_pos = index_to_position(b_index, b_strides)
+                # Map to input indices
+                a_idx = np.zeros(len(a_shape), dtype=np.int32)
+                b_idx = np.zeros(len(b_shape), dtype=np.int32)
+                broadcast_index(out_idx, out_shape, a_shape, a_idx)
+                broadcast_index(out_idx, out_shape, b_shape, b_idx)
                 
-                out[out_pos] = fn(a_storage[a_pos], b_storage[b_pos])
+                # Get positions in input storages
+                a_pos = index_to_position(a_idx, a_strides)
+                b_pos = index_to_position(b_idx, b_strides) 
+                
+                # Apply function
+                out[i] = fn(a_storage[a_pos], b_storage[b_pos])
 
     return _zip
 
@@ -414,23 +405,26 @@ def tensor_reduce(fn: Callable[[float, float], float]) -> Any:
         a_strides: Strides,
         reduce_dim: int,
     ) -> None:
-        out_index = np.zeros(MAX_DIMS, dtype=np.int32)
-        a_index = np.zeros(MAX_DIMS, dtype=np.int32)
-        
-        # go through output positions
+        # Process all output positions
         for i in range(len(out)):
-            to_index(i, out_shape, out_index)
-            out_pos = index_to_position(out_index, out_strides)
+            # Convert to multidimensional index
+            out_idx = np.zeros(len(out_shape), dtype=np.int32)
+            to_index(i, out_shape, out_idx)
             
-            # copy to a_index
-            for j in range(len(out_shape)):
-                a_index[j] = out_index[j]
-            
-            # reduce along the dim
+            # Reduce along specified dimension
             for j in range(a_shape[reduce_dim]):
-                a_index[reduce_dim] = j
-                a_pos = index_to_position(a_index, a_strides)
-                out[out_pos] = fn(out[out_pos], a_storage[a_pos])
+                # Create input index
+                a_idx = out_idx.copy()
+                a_idx[reduce_dim] = j
+                
+                # Get input position
+                a_pos = index_to_position(a_idx, a_strides)
+                
+                # Apply reduction
+                if j == 0:
+                    out[i] = a_storage[a_pos]
+                else:
+                    out[i] = fn(out[i], a_storage[a_pos])
 
     return _reduce
 

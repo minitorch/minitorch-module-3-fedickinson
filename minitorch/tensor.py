@@ -11,7 +11,6 @@ import numpy as np
 
 from . import operators
 from .autodiff import Context, Variable, backpropagate
-from .module import Parameter
 from .tensor_data import TensorData
 from .tensor_functions import (
     EQ,
@@ -43,7 +42,7 @@ if TYPE_CHECKING:
     from .tensor_functions import Function
     from .tensor_ops import TensorBackend
 
-    TensorLike = Union[float, int, "Tensor", Parameter]
+    TensorLike = Union[float, int, "Tensor"]
 
 
 @dataclass
@@ -139,10 +138,6 @@ class Tensor:
         "Turns a python number into a tensor with the same backend."
         if isinstance(b, (int, float)):
             c = Tensor.make([b], (1,), backend=self.backend)
-        elif isinstance(b, Parameter):
-            # Handle Parameter objects by extracting their value
-            b.value._type_(self.backend)
-            c = b.value
         else:
             b._type_(self.backend)
             c = b
@@ -355,9 +350,7 @@ class Tensor:
     def chain_rule(self, d_output: Any) -> Iterable[Tuple[Variable, Any]]:
         h = self.history
         assert h is not None
-        if h.last_fn is None:
-            # leaf node - no chain rule needed
-            return []
+        assert h.last_fn is not None
         assert h.ctx is not None
 
         x = h.last_fn._backward(h.ctx, d_output)

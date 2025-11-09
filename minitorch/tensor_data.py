@@ -3,10 +3,10 @@ from __future__ import annotations
 import random
 from typing import Iterable, Optional, Sequence, Tuple, Union
 
-import numba # type: ignore
-import numpy as np # type: ignore
-import numpy.typing as npt # type: ignore
-from numpy import array, float64 # type: ignore
+import numba
+import numpy as np
+import numpy.typing as npt
+from numpy import array, float64
 from typing_extensions import TypeAlias
 
 from .operators import prod
@@ -42,11 +42,10 @@ def index_to_position(index: Index, strides: Strides) -> int:
     Returns:
         Position in storage
     """
-    # just multiply each index by its stride and add them up
-    pos = 0
-    for i in range(min(len(index), len(strides))):
-        pos += index[i] * strides[i]
-    return pos
+    position = 0
+    for i in range(len(index)):
+        position += index[i] * strides[i]
+    return position
 
 
 def to_index(ordinal: int, shape: Shape, out_index: OutIndex) -> None:
@@ -62,15 +61,13 @@ def to_index(ordinal: int, shape: Shape, out_index: OutIndex) -> None:
         out_index : return index corresponding to position.
 
     """
-    # convert ordinal to index - go backwards through dimensions
-    for i in range(len(shape)):
-        dim_idx = len(shape) - 1 - i
-        # figure out the divisor for this dim
-        divisor = 1
-        for j in range(dim_idx + 1, len(shape)):
-            divisor *= shape[j]
-        
-        out_index[dim_idx] = (ordinal // divisor) % shape[dim_idx]
+    for i in range(len(shape) -1, -1, -1):
+        # Calculate the product of all dimensions after this one
+        size_after = 1
+        for j in range(i + 1, len(shape)):
+            size_after *= shape[j]
+        # Calculate index for this dimension
+        out_index[i] = (ordinal // size_after) % shape[i]
 
 
 def broadcast_index(
@@ -92,23 +89,19 @@ def broadcast_index(
     Returns:
         None
     """
-    # start from right side and work backwards
+    
     big_dim = len(big_shape) - 1
     small_dim = len(shape) - 1
     
-    # go through dims backwards
     while small_dim >= 0:
         if big_dim >= 0:
             if shape[small_dim] == 1:
-                # broadcasting case - use 0
                 out_index[small_dim] = 0
-            else:
-                # normal case
+            else: 
                 out_index[small_dim] = big_index[big_dim]
+            big_dim -= 1
         else:
             out_index[small_dim] = 0
-        
-        big_dim -= 1
         small_dim -= 1
 
 
@@ -126,29 +119,21 @@ def shape_broadcast(shape1: UserShape, shape2: UserShape) -> UserShape:
     Raises:
         IndexingError : if cannot broadcast
     """
-    # make lists so we can change them
     s1 = list(shape1)
     s2 = list(shape2)
     
-    # pad shorter one with 1s at front
     while len(s1) < len(s2):
         s1.insert(0, 1)
     while len(s2) < len(s1):
         s2.insert(0, 1)
-    
-    # check if they can broadcast
+        
     result = []
     for i in range(len(s1)):
-        if s1[i] == s2[i]:
-            result.append(s1[i])
-        elif s1[i] == 1:
-            result.append(s2[i])
-        elif s2[i] == 1:
-            result.append(s1[i])
-        else:
-            raise IndexingError(f"cant broadcast {shape1} and {shape2}")
-    
+        if s1[i] != s2[i] and s1[i] != 1 and s2[i] != 1:
+            raise IndexingError(f"Cannot broadcast shapes {shape1} and {shape2}")
+        result.append(max(s1[i], s2[i]))
     return tuple(result)
+    
 
 
 def strides_from_shape(shape: UserShape) -> UserStrides:
@@ -217,13 +202,10 @@ class TensorData:
         return shape_broadcast(shape_a, shape_b)
 
     def index(self, index: Union[int, UserIndex]) -> int:
-        aindex: Index
         if isinstance(index, int):
-            aindex = array([index])
-        elif isinstance(index, tuple):
+            aindex: Index = array([index])
+        if isinstance(index, tuple):
             aindex = array(index)
-        else:
-            raise IndexingError(f"Invalid index type: {type(index)}")
 
         # Check for errors
         if aindex.shape[0] != len(self.shape):
@@ -271,10 +253,8 @@ class TensorData:
             range(len(self.shape))
         ), f"Must give a position to each dimension. Shape: {self.shape} Order: {order}"
 
-        # create new shape and strides based on permutation
         new_shape = tuple(self.shape[i] for i in order)
         new_strides = tuple(self.strides[i] for i in order)
-        
         return TensorData(self._storage, new_shape, new_strides)
 
     def to_string(self) -> str:

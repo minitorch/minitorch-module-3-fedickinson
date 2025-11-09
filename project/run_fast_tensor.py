@@ -45,7 +45,11 @@ class Linear(minitorch.Module):
 
     def forward(self, x):
         # matrix multiply + bias
-        return x @ self.weights + self.bias
+        # x shape: (batch, in_size)
+        # weights shape: (in_size, out_size)
+        # result shape: (batch, out_size)
+        batch = x.shape[0]
+        return (x @ self.weights.value).view(batch, self.out_size) + self.bias.value.view(1, self.out_size)
 
 
 class FastTrain:
@@ -61,6 +65,7 @@ class FastTrain:
         return self.model.forward(minitorch.tensor(X, backend=self.backend))
 
     def train(self, data, learning_rate, max_epochs=500, log_fn=default_log_fn):
+        import time
         self.model = Network(self.hidden_layers, self.backend)
         optim = minitorch.SGD(self.model.parameters(), learning_rate)
         losses = []
@@ -68,7 +73,10 @@ class FastTrain:
         X = minitorch.tensor(data.X, backend=self.backend)
         y = minitorch.tensor(data.y, backend=self.backend)
 
+        epoch_times = []
         for epoch in range(max_epochs):
+            start_time = time.time()
+            
             total_loss = 0.0
             optim.zero_grad()
 
@@ -83,12 +91,16 @@ class FastTrain:
 
             # Update
             optim.step()
+            
+            epoch_time = time.time() - start_time
+            epoch_times.append(epoch_time)
 
             # Logging
-            if epoch % 10 == 0 or epoch == max_epochs:
+            if epoch % 10 == 0 or epoch == max_epochs - 1:
                 y2 = minitorch.tensor(data.y)
                 correct = int(((out.detach() > 0.5) == y2).sum()[0])
-                log_fn(epoch, total_loss, correct, losses)
+                avg_time = sum(epoch_times[-10:]) / len(epoch_times[-10:])
+                print(f"Epoch {epoch:3d} | Loss: {total_loss:8.4f} | Correct: {correct:3d}/{data.N} | Time/Epoch: {avg_time:.4f}s")
 
 
 if __name__ == "__main__":

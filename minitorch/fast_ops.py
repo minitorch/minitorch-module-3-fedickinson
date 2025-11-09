@@ -33,9 +33,9 @@ def njit(fn: Fn, **kwargs: Any) -> Fn:
     return _njit(inline="always", **kwargs)(fn)  # type: ignore
 
 
-to_index = njit(to_index)
-index_to_position = njit(index_to_position)
-broadcast_index = njit(broadcast_index)
+to_index = njit(to_index, parallel=False)
+index_to_position = njit(index_to_position, parallel=False)
+broadcast_index = njit(broadcast_index, parallel=False)
 
 
 class FastOps(TensorOps):
