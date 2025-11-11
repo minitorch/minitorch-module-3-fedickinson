@@ -3,9 +3,10 @@ import sys
 import os
 
 # Configure Numba threading BEFORE importing numba
-os.environ['NUMBA_NUM_THREADS'] = '2'
-os.environ['OMP_NUM_THREADS'] = '2'
-os.environ['NUMBA_THREADING_LAYER'] = 'omp'
+# Use single thread to avoid deadlocks in Kaggle/Colab
+os.environ['NUMBA_NUM_THREADS'] = '1'
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['NUMBA_THREADING_LAYER'] = 'workqueue'
 
 import numba
 
