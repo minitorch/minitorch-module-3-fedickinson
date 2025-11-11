@@ -1,14 +1,28 @@
 import random
+import sys
+import os
+
+# Configure Numba threading BEFORE importing numba
+os.environ['NUMBA_NUM_THREADS'] = '2'
+os.environ['OMP_NUM_THREADS'] = '2'
+os.environ['NUMBA_THREADING_LAYER'] = 'omp'
 
 import numba
 
 import minitorch
 
 datasets = minitorch.datasets
+
+# Debug: Print before creating backends
+print("Creating FastTensorBackend...", flush=True)
 FastTensorBackend = minitorch.TensorBackend(minitorch.FastOps)
+print("✅ FastTensorBackend created", flush=True)
+
 GPUBackend = None
 if numba.cuda.is_available():
+    print("Creating GPUBackend...", flush=True)
     GPUBackend = minitorch.TensorBackend(minitorch.CudaOps)
+    print("✅ GPUBackend created", flush=True)
 
 
 def default_log_fn(epoch, total_loss, correct, losses):
@@ -66,15 +80,24 @@ class FastTrain:
 
     def train(self, data, learning_rate, max_epochs=500, log_fn=default_log_fn):
         import time
+        print(f"Creating model with {self.hidden_layers} hidden layers...", flush=True)
         self.model = Network(self.hidden_layers, self.backend)
+        print("✅ Model created", flush=True)
+        
         optim = minitorch.SGD(self.model.parameters(), learning_rate)
         losses = []
 
+        print(f"Creating input tensors (N={data.N})...", flush=True)
         X = minitorch.tensor(data.X, backend=self.backend)
         y = minitorch.tensor(data.y, backend=self.backend)
+        print("✅ Tensors created", flush=True)
 
+        print(f"Starting training for {max_epochs} epochs...", flush=True)
         epoch_times = []
         for epoch in range(max_epochs):
+            if epoch == 0:
+                print("Starting epoch 0 (first epoch may be slow due to JIT compilation)...", flush=True)
+            
             start_time = time.time()
             
             total_loss = 0.0
@@ -100,7 +123,7 @@ class FastTrain:
                 y2 = minitorch.tensor(data.y)
                 correct = int(((out.detach() > 0.5) == y2).sum()[0])
                 avg_time = sum(epoch_times[-10:]) / len(epoch_times[-10:])
-                print(f"Epoch {epoch:3d} | Loss: {total_loss:8.4f} | Correct: {correct:3d}/{data.N} | Time/Epoch: {avg_time:.4f}s")
+                print(f"Epoch {epoch:3d} | Loss: {total_loss:8.4f} | Correct: {correct:3d}/{data.N} | Time/Epoch: {avg_time:.4f}s", flush=True)
 
 
 if __name__ == "__main__":
@@ -117,25 +140,38 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     PTS = args.PTS
-
+    
+    print(f"Loading dataset: {args.DATASET} with {PTS} points...", flush=True)
     if args.DATASET == "xor":
         data = minitorch.datasets["Xor"](PTS)
     elif args.DATASET == "simple":
         data = minitorch.datasets["Simple"](PTS)
     elif args.DATASET == "split":
         data = minitorch.datasets["Split"](PTS)
+    elif args.DATASET == "circle":
+        data = minitorch.datasets["Circle"](PTS)
+    elif args.DATASET == "spiral":
+        data = minitorch.datasets["Spiral"](PTS)
+    print(f"✅ Dataset loaded: {data.N} points", flush=True)
 
     HIDDEN = int(args.HIDDEN)
     RATE = args.RATE
 
     # Select backend
+    print(f"Selecting backend: {args.BACKEND}", flush=True)
     if args.BACKEND == "gpu":
         if GPUBackend is None:
-            print("GPU backend requested but CUDA is not available. Falling back to CPU.")
+            print("⚠️ GPU backend requested but CUDA is not available. Falling back to CPU.", flush=True)
             backend = FastTensorBackend
         else:
+            print("✅ Using GPU backend", flush=True)
             backend = GPUBackend
     else:
+        print("✅ Using CPU FastOps backend", flush=True)
         backend = FastTensorBackend
 
+    print(f"\n{'='*60}", flush=True)
+    print(f"Configuration: HIDDEN={HIDDEN}, RATE={RATE}, BACKEND={args.BACKEND}", flush=True)
+    print(f"{'='*60}\n", flush=True)
+    
     FastTrain(HIDDEN, backend=backend).train(data, RATE)
