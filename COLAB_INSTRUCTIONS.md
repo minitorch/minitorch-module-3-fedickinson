@@ -18,9 +18,15 @@
 
 ### 1.2 Install Dependencies
 ```python
+# numba-cuda is already pre-installed in Colab (check with: pip list | grep numba)
+# Just install other requirements
 !pip install -r requirements.txt
-!pip install numba
+
+# Install minitorch package
+!pip install -e .
 ```
+
+**Note:** Google Colab comes with `numba-cuda`, `numba`, and `numpy` pre-installed with compatible versions. The `requirements.txt` file only specifies testing tools and other dependencies.
 
 ### 1.3 Enable GPU
 1. Go to Runtime → Change runtime type
@@ -183,13 +189,30 @@ Based on the assignment requirements:
 
 ## Step 7: Troubleshooting
 
+### If you get "CUDA_ERROR_UNSUPPORTED_PTX_VERSION":
+This is a PTX version mismatch. **Solution:**
+```python
+# Verify numba-cuda is installed (should be pre-installed in Colab)
+!pip list | grep -E "numba|numpy"
+
+# If missing, install it:
+!pip install numba-cuda
+
+# Then reinstall your package
+!pip install -e .
+```
+
 ### If CUDA is not available:
 ```python
 # Check CUDA installation
 !nvcc --version
 
-# Reinstall numba with CUDA support
-!pip install --upgrade numba
+# Verify GPU is enabled
+# Go to Runtime → Change runtime type → Select GPU
+
+# Check CUDA availability
+from numba import cuda
+print("CUDA Available:", cuda.is_available())
 ```
 
 ### If training crashes:

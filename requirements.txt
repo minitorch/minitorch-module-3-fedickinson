@@ -1,9 +1,16 @@
+# Core dependencies
+# Note: numba and numpy are pre-installed in Colab (via numba-cuda)
+# No need to specify them here - just use what Colab provides
+
+# Testing framework
+hypothesis==6.54.0
+pytest==8.3.2
+pytest-env==1.1.3
+pytest-runner==5.2
+
+# Code quality tools
+pre-commit==2.20.0
 colorama==0.4.3
-hypothesis == 6.54
-numba == 0.60
-numpy == 2.0.0
-pre-commit == 2.20.0
-pytest == 8.3.2
-pytest-env
-pytest-runner == 5.2
-typing_extensions
+
+# Type checking
+typing_extensions==4.9.0

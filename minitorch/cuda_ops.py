@@ -514,10 +514,6 @@ def _tensor_matrix_multiply(
     pi = cuda.threadIdx.x
     pj = cuda.threadIdx.y
     
-    # check bounds
-    if i >= out_shape[1] or j >= out_shape[2]:
-        return
-    
     # accumulator for dot product
     temp = 0.0
     
@@ -548,18 +544,20 @@ def _tensor_matrix_multiply(
         # wait for all threads to load
         cuda.syncthreads()
         
-        # compute partial dot product
-        for k in range(min(BLOCK_DIM, a_shape[2] - tile_start)):
-            temp += a_shared[pi, k] * b_shared[k, pj]
+        # compute partial dot product (only for valid threads)
+        if i < out_shape[1] and j < out_shape[2]:
+            for k in range(min(BLOCK_DIM, a_shape[2] - tile_start)):
+                temp += a_shared[pi, k] * b_shared[k, pj]
         
         # sync before next tile
         cuda.syncthreads()
     
-    # write final result to global memory
-    out_pos = (batch * out_strides[0] + 
-              i * out_strides[1] + 
-              j * out_strides[2])
-    out[out_pos] = temp
+    # write final result to global memory (only for valid threads)
+    if i < out_shape[1] and j < out_shape[2]:
+        out_pos = (batch * out_strides[0] + 
+                  i * out_strides[1] + 
+                  j * out_strides[2])
+        out[out_pos] = temp
 
 
 tensor_matrix_multiply = jit(_tensor_matrix_multiply)
