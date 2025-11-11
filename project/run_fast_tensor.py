@@ -30,18 +30,29 @@ def default_log_fn(epoch, total_loss, correct, losses):
 
 
 def RParam(*shape, backend):
+    print(f"  RParam: creating random tensor with shape {shape}...", flush=True)
     r = 2 * (minitorch.rand(shape, backend=backend) - 0.5)
+    print(f"  ✅ RParam: tensor created", flush=True)
     return minitorch.Parameter(r)
 
 
 class Network(minitorch.Module):
     def __init__(self, hidden, backend):
+        print(f"Network.__init__: hidden={hidden}", flush=True)
         super().__init__()
 
         # Submodules
+        print(f"Creating layer1: Linear(2, {hidden})...", flush=True)
         self.layer1 = Linear(2, hidden, backend)
+        print(f"✅ layer1 created", flush=True)
+        
+        print(f"Creating layer2: Linear({hidden}, {hidden})...", flush=True)
         self.layer2 = Linear(hidden, hidden, backend)
+        print(f"✅ layer2 created", flush=True)
+        
+        print(f"Creating layer3: Linear({hidden}, 1)...", flush=True)
         self.layer3 = Linear(hidden, 1, backend)
+        print(f"✅ layer3 created", flush=True)
 
     def forward(self, x):
         # 3 layer network with relu
@@ -68,8 +79,11 @@ class Linear(minitorch.Module):
 
 class FastTrain:
     def __init__(self, hidden_layers, backend=FastTensorBackend):
+        print(f"FastTrain.__init__: hidden_layers={hidden_layers}", flush=True)
         self.hidden_layers = hidden_layers
+        print(f"Creating Network model...", flush=True)
         self.model = Network(hidden_layers, backend)
+        print(f"✅ Network model created", flush=True)
         self.backend = backend
 
     def run_one(self, x):
