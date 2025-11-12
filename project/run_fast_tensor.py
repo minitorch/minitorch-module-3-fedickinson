@@ -100,7 +100,6 @@ class FastTrain:
         print("✅ Model created", flush=True)
         
         optim = minitorch.SGD(self.model.parameters(), learning_rate)
-        losses = []
 
         print(f"Creating input tensors (N={data.N})...", flush=True)
         X = minitorch.tensor(data.X, backend=self.backend)
@@ -115,7 +114,6 @@ class FastTrain:
             
             start_time = time.time()
             
-            total_loss = 0.0
             optim.zero_grad()
 
             # Forward
@@ -124,8 +122,6 @@ class FastTrain:
 
             loss = -prob.log()
             (loss / data.N).sum().view(1).backward()
-            total_loss = loss.sum().view(1)[0]
-            losses.append(total_loss)
 
             # Update
             optim.step()
@@ -133,9 +129,10 @@ class FastTrain:
             epoch_time = time.time() - start_time
             epoch_times.append(epoch_time)
 
-            # Logging
+            # Logging (only transfer GPU→CPU when actually logging)
             if epoch % 10 == 0 or epoch == max_epochs - 1:
-                y2 = minitorch.tensor(data.y)
+                total_loss = float(loss.sum().view(1)[0])  # Only transfer for logging
+                y2 = minitorch.tensor(data.y, backend=self.backend)  # Use same backend as model
                 correct = int(((out.detach() > 0.5) == y2).sum()[0])
                 avg_time = sum(epoch_times[-10:]) / len(epoch_times[-10:])
                 print(f"Epoch {epoch:3d} | Loss: {total_loss:8.4f} | Correct: {correct:3d}/{data.N} | Time/Epoch: {avg_time:.4f}s", flush=True)
